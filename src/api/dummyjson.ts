@@ -2,7 +2,7 @@ export type DummyJsonProduct = {
   id: number;
   title: string;
   description: string;
-  price: number; // USD in DummyJSON
+  price: number; 
   discountPercentage: number;
   rating: number;
   stock: number;

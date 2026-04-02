@@ -38,7 +38,10 @@ export type CartState = {
   discount?: Discount;
   shipping: ShippingMethod;
   address: Address;
+  userLoggedIn: boolean;
+  locationEnabled: boolean;
+  locationServiceable: boolean;
   payment: PaymentMethod;
-  taxRate: number; // 0..1
+  taxRate: number; 
 };
 

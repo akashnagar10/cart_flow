@@ -1,14 +1,30 @@
 ## Aforro — Cart Flow (React Native)
 
-React Native CLI + TypeScript implementation of a complete cart → checkout → payment → success flow.
+React Native CLI + TypeScript implementation of a complete **Product → Cart → Checkout → Payment → Success** flow, built to match the “Cart Flow” technical assignment.
 
 ### What’s implemented
 
-- **Cart screen**: list items, increment/decrement quantity, remove item
-- **Checkout screen**: address summary + shipping method selection
-- **Payment screen**: payment method selection + place order
-- **Success screen**: order confirmation + reset back to cart
-- **Business logic**: subtotal/discount/tax/shipping/total are computed from state (no hardcoded totals)
+- **Product detail** (`src/screens/ProductDetailScreen.tsx`)
+  - View a product (dummy API)
+  - Add to cart (single add or “2 options” bottom sheet for discounted items)
+  - Floating cart button shows a **dot badge** when cart has items
+- **Cart screen** (`src/screens/CartScreen.tsx`)
+  - Cart items list with quantity stepper
+  - “Did you forget?” horizontal recommendations strip (dummy API)
+  - Coupons UI (apply/remove) affecting totals
+  - Delivery instructions chips + custom notes
+  - Cart footer states (login / location enabled / serviceable) matching the provided screenshots
+- **Checkout screen** (`src/screens/CheckoutScreen.tsx`)
+  - Address summary + shipping method selection
+- **Payment screen** (`src/screens/PaymentScreen.tsx`)
+  - Payment method selection + place order
+- **Success screen** (`src/screens/SuccessScreen.tsx`)
+  - Order confirmation + reset back to cart
+- **Business logic** (`src/state/selectors.ts`)
+  - Subtotal/discount/tax/shipping/total are computed from state (**no hardcoded totals**)
+  - Free delivery rule: **shipping fee becomes 0 when pre‑shipping total ≥ ₹3000**
+- **Typography**
+  - Centralized in `src/theme/typography.ts` (Plus Jakarta Sans)
 
 ### Project structure
 
@@ -19,22 +35,56 @@ React Native CLI + TypeScript implementation of a complete cart → checkout →
 - **`src/ui/`**: reusable primitives (screen layout, button, card, divider, quantity stepper)
 - **`src/theme/`**: centralized theme tokens
 
-### Running locally
+### Setup & running locally
 
-Prerequisites: follow React Native environment setup: `https://reactnative.dev/docs/set-up-your-environment`
+Prerequisite: follow the official React Native environment setup for **React Native CLI**:
+`https://reactnative.dev/docs/set-up-your-environment`
+
+Install dependencies:
 
 ```sh
 npm install
+```
+
+Start Metro:
+
+```sh
 npm start
 ```
 
-In another terminal:
+Run the app (in a second terminal):
 
 ```sh
 npm run ios
 # or
 npm run android
 ```
+
+### How the assessment flow works (end-to-end)
+
+- **Product detail → Add to cart**
+  - Products come from DummyJSON: `src/api/dummyjson.ts`
+  - “Add” inserts a `CartItem` into `CartContext`
+  - For “2 options”, a small bottom sheet lets you select quantities for variants before confirming
+- **Cart**
+  - Quantities update via reducer actions (`inc`/`dec`)
+  - Totals shown on Cart/Checkout/Payment are computed by pure selectors (`src/state/selectors.ts`)
+- **Checkout**
+  - Choose shipping method (fee affects totals; may become free if threshold is met)
+- **Payment**
+  - Select payment method and “Place order”
+- **Success**
+  - Shows generated order id, then resets cart state
+
+### Cart footer UI states (for the assignment screenshots)
+
+The Cart screen footer switches based on flags stored in `CartState`:
+
+- **`userLoggedIn`**
+- **`locationEnabled`**
+- **`locationServiceable`**
+
+They’re currently initialized in `src/state/CartContext.tsx` (`initialState`) so you can easily flip them while developing.
 
 ### Notes about the Figma requirement
 

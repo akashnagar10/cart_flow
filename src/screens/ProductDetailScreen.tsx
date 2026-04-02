@@ -22,6 +22,9 @@ import { Card } from '../ui/Card';
 import { QuantityStepper } from '../ui/QuantityStepper';
 import { Screen } from '../ui/Screen';
 import DiscountTag from '../components/DiscountTag';
+import { palette } from '../theme/colors';
+import LeftArrowIcon from '../assets/LeftArrowIcon';
+import ShareIcon from '../assets/ShareIcon';
 
 type Variant = {
   key: string;
@@ -89,8 +92,8 @@ export function ProductDetailScreen() {
   const variants: Variant[] = React.useMemo(() => {
     // DummyJSON doesn't have variants; fabricate 2–3 options like the Figma sheet.
     const base: Variant[] = [
-      { key: 'v1', label: '1 × 1 kg', multiplier: 1 },
-      { key: 'v2', label: '3 × 1 kg', multiplier: 3 },
+      { key: 'v1', label: '1 × 50 g', multiplier: 1 },
+      { key: 'v2', label: '2 × 100 g', multiplier: 2 },
     ];
     return base;
   }, []);
@@ -99,14 +102,12 @@ export function ProductDetailScreen() {
   const hasMoreThanTwoOptions = variants.length > 2;
 
   const seedQty = React.useCallback(() => {
-    // Start with 1 selected for the first option so users can confirm quickly.
     const first = variants[0];
     if (!first) return {};
     return { [first.key]: 1 } as Record<string, number>;
   }, [variants]);
 
   const onAddPress = React.useCallback(() => {
-    // Figma shows options; use sheet as the main add interaction.
     setVariantQty(seedQty());
     setSheetProduct(product);
     setOptionsOpen(true);
@@ -194,6 +195,12 @@ export function ProductDetailScreen() {
                 right: 16,
               },
             ]}>
+            {cart.state.items.length > 0 ? (
+              <View
+                pointerEvents="none"
+                style={[styles.cartDot, { backgroundColor: t.colors.accent, borderColor: t.colors.surface }]}
+              />
+            ) : null}
             <CartIcon color={t.colors.primaryText} size={24} />
           </Pressable>
         </View>
@@ -204,17 +211,20 @@ export function ProductDetailScreen() {
             accessibilityRole="button"
             onPress={() => nav.navigate('Cart')}
             style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}>
-            <Text style={[t.text.h2, { color: t.colors.text }]}>{'‹'}</Text>
+            <LeftArrowIcon style={[t.text.h2, { color: t.colors.text }]} />
           </Pressable>
-          <Text style={[t.text.label, { color: t.colors.text, flex: 1 }]} numberOfLines={1}>
+          <Text
+            style={[
+              t.text.label,
+              {
+                color: t.colors.text,
+                flex: 1,
+              },
+            ]}
+            numberOfLines={1}>
             {product?.title ?? 'Product'}
           </Text>
-          {/* <Pressable
-            accessibilityRole="button"
-            onPress={() => {}}
-            style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}>
-            <Text style={[t.text.h2, { color: t.colors.text }]}>{'⤴︎'}</Text>
-          </Pressable> */}
+          <ShareIcon style={[t.text.h2, { color: t.colors.text }]} />
         </View>
       </View>
 
@@ -242,16 +252,11 @@ export function ProductDetailScreen() {
                       value={Math.round(product.discountPercentage)}
                       width={50}
                       height={70}
-                      color="#2F6D86"
+                      color={t.colors.discountTag}
                     />
                   </View>
                 ) : null}
-                {/* <View style={[styles.discountBadge, { backgroundColor: '#2F6D86' }]}>
-                  <Text style={[t.text.small, { color: '#FFFFFF', fontWeight: '800' }]}>
-                    {`${Math.round(product.discountPercentage)}%\nOFF`}
-                  </Text>
-                </View> */}
-               
+
                 <Image source={{ uri: product.thumbnail }} style={styles.hero} resizeMode="contain" />
                 {product.images.length > 1 ? (
                   <View style={styles.dots}>
@@ -260,7 +265,7 @@ export function ProductDetailScreen() {
                         key={i}
                         style={[
                           styles.dot,
-                          { backgroundColor: i === 0 ? '#F59E0B' : t.colors.border },
+                          { backgroundColor: i === 0 ? t.colors.warningIcon : t.colors.border },
                         ]}
                       />
                     ))}
@@ -268,8 +273,15 @@ export function ProductDetailScreen() {
                 ) : null}
               </View>
               <View style={{ padding: 14, paddingTop: 0 }}>
-                <Text style={[t.text.small, { color: t.colors.muted }]}>{product.brand ?? 'Brand'}</Text>
-                <Text style={[t.text.h2, { color: t.colors.text, marginTop: 4 }]} numberOfLines={2}>
+                <Text style={[t.text.small, { color: t.colors.muted }]}>
+                  {product.brand ?? 'Brand'}
+                </Text>
+                <Text
+                  style={[
+                    t.text.h2,
+                    { color: t.colors.text, marginTop: 4 },
+                  ]}
+                  numberOfLines={2}>
                   {product.title}
                 </Text>
 
@@ -283,7 +295,16 @@ export function ProductDetailScreen() {
                     ) : null}
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text style={[t.text.label, { color: t.colors.text }]}>{formatMoney(priceInr)}</Text>
-                      <Text style={[t.text.small, { color: t.colors.muted, textDecorationLine: 'line-through' }]}>{formatMoney(mrpInr)}</Text>
+                      <Text
+                        style={[
+                          t.text.small,
+                          {
+                            color: t.colors.muted,
+                            textDecorationLine: 'line-through',
+                          },
+                        ]}>
+                        {formatMoney(mrpInr)}
+                      </Text>
                     </View>
                   </View>
                   <View style={styles.actionsRow}>
@@ -348,39 +369,39 @@ export function ProductDetailScreen() {
           </View>
 
           <View style={{ height: 18 }} />
-{
-  alsoBought?.length > 0 ? (
-    <>
-    <View style={{ paddingHorizontal: t.spacing.lg }}>
-            <Text style={[t.text.h2, { color: t.colors.text }]}>Customers also bought</Text>
-          </View>
-          <View style={{ height: 10 }} />
+          {
+            alsoBought?.length > 0 ? (
+              <>
+                <View style={{ paddingHorizontal: t.spacing.lg }}>
+                  <Text style={[t.text.h2, { color: t.colors.text }]}>Customers also bought</Text>
+                </View>
+                <View style={{ height: 10 }} />
 
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: t.spacing.lg, gap: 12 }}
-            data={alsoBought}
-            keyExtractor={it => String(it.id)}
-            renderItem={({ item }) => (
-              <View style={{ width: 140 }}>
-                <ProductCard
-                  title={item.title}
-                  subtitle={item.brand}
-                  priceUsd={item.price}
-                  discountPct={item.discountPercentage}
-                  imageUrl={item.thumbnail}
-                  ctaLabel={getAddCtaLabel(item)}
-                  onCtaPress={() => (hasMoreThanTwoOptions ? onCardOptionsPress(item) : onStartAdd(item))}
-                  onPress={() => onSelectProduct(item)}
+                <FlatList
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: t.spacing.lg, gap: 12 }}
+                  data={alsoBought}
+                  keyExtractor={it => String(it.id)}
+                  renderItem={({ item }) => (
+                    <View style={{ width: 140 }}>
+                      <ProductCard
+                        title={item.title}
+                        subtitle={item.brand}
+                        priceUsd={item.price}
+                        discountPct={item.discountPercentage}
+                        imageUrl={item.thumbnail}
+                        ctaLabel={getAddCtaLabel(item)}
+                        onCtaPress={() => (hasMoreThanTwoOptions ? onCardOptionsPress(item) : onStartAdd(item))}
+                        onPress={() => onSelectProduct(item)}
+                      />
+                    </View>
+                  )}
                 />
-              </View>
-            )}
-          />
-    </>
-  ) : null
-}
-          
+              </>
+            ) : null
+          }
+
 
           <View style={{ height: 28 }} />
         </View>
@@ -493,7 +514,7 @@ function OptionsSheet({
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 10 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 20, alignSelf: "center" },
   fabHost: { flex: 1 },
   fab: {
     position: 'absolute',
@@ -502,11 +523,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 27,
-    shadowColor: '#000',
+    shadowColor: palette.black,
     shadowOpacity: 0.18,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
+  },
+  cartDot: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
   },
   hero: { width: '100%', height: 220 },
   discountBadge: {
@@ -534,7 +564,7 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 18 },
   variantRow: { flexDirection: 'row', gap: 12, borderWidth: 1, padding: 12, alignItems: 'center' },
-  variantImg: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#F3F4F6' },
+  variantImg: { width: 44, height: 44, borderRadius: 10, backgroundColor: palette.gray100 },
   smallAdd: { height: 28, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
 });
 

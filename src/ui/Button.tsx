@@ -26,7 +26,7 @@ export function Button({
   const border =
     variant === 'ghost' ? { borderWidth: 1, borderColor: t.colors.border } : undefined;
   const textColor =
-    variant === 'primary' ? t.colors.primaryText : variant === 'danger' ? '#FFFFFF' : t.colors.text;
+    variant === 'primary' ? t.colors.primaryText : variant === 'danger' ? t.colors.primaryText : t.colors.text;
 
   return (
     <Pressable

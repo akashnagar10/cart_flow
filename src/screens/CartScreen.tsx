@@ -1,26 +1,29 @@
 import React from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Image, Modal, Pressable, StyleSheet, Text, TextInput, View, Alert } from 'react-native';
 import { fetchProducts, DummyJsonProduct } from '../api/dummyjson';
 import { useNav } from '../navigation/AppNavigator';
 import { useCart } from '../state/CartContext';
 import { formatMoney, usdToInr } from '../state/money';
-import { selectDiscountAmount, selectShippingFee, selectSubtotal, selectTotal } from '../state/selectors';
+import { FREE_DELIVERY_THRESHOLD, selectDiscountAmount, selectPreShippingTotal, selectShippingFee, selectSubtotal, selectTotal } from '../state/selectors';
 import { useTheme } from '../theme/ThemeContext';
-import { OrderSummary } from '../components/OrderSummary';
+import { ProductCard } from '../components/ProductCard';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Divider } from '../ui/Divider';
 import { Screen } from '../ui/Screen';
 import { QuantityStepper } from '../ui/QuantityStepper';
 import PercentIcon from '../assets/PercentIcon';
+import LeftArrowIcon from '../assets/LeftArrowIcon';
+import LocationIcon from '../assets/LocationIcon';
+import { palette } from '../theme/colors';
 
 const coupons = [
-  { id: 'ABCD', title: 'Add items worth ₹20 to avail this offer', status: 'active', amountOff: '₹250\nOFF', amountMoney: 250 },
-  { id: 'ABCD2', title: 'Upto ₹120 on orders above ₹1200', status: 'expired', amountOff: '₹200\nOFF', amountMoney: 200 },
-  { id: 'ABCD3', title: 'Upto ₹120 on orders above ₹1200', status: 'active', amountOff: '₹300\nOFF', amountMoney: 300 },
-  { id: 'ABCD4', title: 'Flat ₹75 off on orders above ₹799', status: 'active', amountOff: '₹20\nOFF', amountMoney: 20 },
-  { id: 'ABCD5', title: 'Extra ₹50 off with wallet payments', status: 'active', amountOff: '₹50\nOFF', amountMoney: 50 },
-  { id: 'ABCD6', title: 'Upto ₹200 off on grocery combos', status: 'expired', amountOff: '₹250\nOFF', amountMoney: 250 },
+  { id: 'ABCDEFGH', title: 'Add items worth ₹20 to avail this offer', status: 'active', amountOff: '₹250\nOFF', amountMoney: 250 },
+  { id: 'ABCD2DHJ', title: 'Upto ₹120 on orders above ₹1200', status: 'expired', amountOff: '₹120\nOFF', amountMoney: 120 },
+  { id: 'ABCD3EG', title: 'Upto ₹150 on orders above ₹1200', status: 'active', amountOff: '₹150\nOFF', amountMoney: 150 },
+  { id: 'ABCD4HJK', title: 'Flat ₹75 off on orders above ₹799', status: 'active', amountOff: '₹20\nOFF', amountMoney: 20 },
+  { id: 'ABCD5KLM', title: 'Extra ₹50 off with wallet payments', status: 'active', amountOff: '₹50\nOFF', amountMoney: 50 },
+  { id: 'ABCD6NOP', title: 'Upto ₹200 off on grocery combos', status: 'expired', amountOff: '₹250\nOFF', amountMoney: 250 },
 ];
 
 export function CartScreen() {
@@ -30,11 +33,25 @@ export function CartScreen() {
   const total = selectTotal(cart.state);
   const discountAmount = selectDiscountAmount(cart.state);
   const subtotal = selectSubtotal(cart.state);
+  const preShippingTotal = selectPreShippingTotal(cart.state);
   const shippingFee = selectShippingFee(cart.state);
+  const amountToFreeDelivery = Math.max(0, FREE_DELIVERY_THRESHOLD - preShippingTotal);
   const [reco, setReco] = React.useState<DummyJsonProduct[]>([]);
+  const [optionsOpen, setOptionsOpen] = React.useState(false);
+  const [sheetProduct, setSheetProduct] = React.useState<DummyJsonProduct | null>(null);
+  const [variantQty, setVariantQty] = React.useState<Record<string, number>>({});
   const [selectedInstructions, setSelectedInstructions] = React.useState<string[]>([]);
   const [customInstructions, setCustomInstructions] = React.useState<string[]>([]);
   const [customDraft, setCustomDraft] = React.useState('');
+
+  type Variant = { key: string; label: string; multiplier: number };
+  const variants = React.useMemo<Variant[]>(
+    () => [
+      { key: 'v1', label: '1 × 100 g', multiplier: 1 },
+      { key: 'v2', label: '3 × 100 g', multiplier: 2 },
+    ],
+    [],
+  );
 
   const cashbackAmount = React.useMemo(() => {
     // Simple dynamic cashback model; keeps UI consistent across the screen.
@@ -75,9 +92,9 @@ export function CartScreen() {
     let alive = true;
     (async () => {
       try {
-        const list = await fetchProducts(10, 0);
+        const list = await fetchProducts(20, 0);
         if (!alive) return;
-        setReco(list.products.slice(0, 6));
+        setReco(list.products);
       } catch {
         if (!alive) return;
         setReco([]);
@@ -88,49 +105,183 @@ export function CartScreen() {
     };
   }, []);
 
+  const totalSelected = variants.reduce((sum, v) => sum + (variantQty[v.key] ?? 0), 0);
+
+  const seedQty = React.useCallback(() => {
+    const first = variants[0];
+    if (!first) return {};
+    return { [first.key]: 1 } as Record<string, number>;
+  }, [variants]);
+
+  const onOpenOptions = React.useCallback(
+    (p: DummyJsonProduct) => {
+      setVariantQty(seedQty());
+      setSheetProduct(p);
+      setOptionsOpen(true);
+    },
+    [seedQty],
+  );
+
+  const onCloseOptions = React.useCallback(() => {
+    setOptionsOpen(false);
+    setSheetProduct(null);
+    setVariantQty({});
+  }, []);
+
+  const onAddSingle = React.useCallback(
+    (p: DummyJsonProduct) => {
+      const baseUnit = usdToInr(p.price);
+      cart.add({
+        id: `p-${p.id}-single`,
+        title: p.title,
+        subtitle: p.brand,
+        imageUrl: p.thumbnail,
+        unitPrice: baseUnit,
+        quantity: 1,
+      });
+    },
+    [cart],
+  );
+
+  const onConfirmOptions = React.useCallback(() => {
+    if (!sheetProduct) return;
+    const baseUnit = usdToInr(sheetProduct.price);
+
+    variants.forEach(v => {
+      const q = variantQty[v.key] ?? 0;
+      if (q <= 0) return;
+      cart.add({
+        id: `p-${sheetProduct.id}-${v.key}`,
+        title: sheetProduct.title,
+        subtitle: v.label,
+        imageUrl: sheetProduct.thumbnail,
+        unitPrice: baseUnit * v.multiplier,
+        quantity: q,
+      });
+    });
+
+    onCloseOptions();
+  }, [cart, onCloseOptions, sheetProduct, variantQty, variants]);
+
+  const handleLogin = () => {
+    Alert.alert('Good News 🎉', 'This feature is coming soon!');
+  }
+
+  const handleAddAddress = () => {
+    Alert.alert('Add Address Feature 🎉', 'This feature is coming soon!');
+  }
+
+  const handleChangeAddress = () => {
+    Alert.alert('Change Address Feature 🎉', 'This feature is coming soon!');
+  }
+
   return (
     <Screen
       scroll
       footer={
-        <View style={{ gap: 10 }}>
-          <View style={[styles.deliveryRow, { borderColor: t.colors.border, backgroundColor: t.colors.surface, borderRadius: t.radii.lg }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={[t.text.small, { color: t.colors.muted }]}>Deliver to Home</Text>
-              <Text style={[t.text.label, { color: t.colors.text }]} numberOfLines={1}>
-                {`${cart.state.address.line1}, ${cart.state.address.city}`}
+        <View style={{ gap: 10, }}>
+          {!cart.state.userLoggedIn ? (
+            <Card style={{ padding: 14 }}>
+              <Text style={[t.text.label, { color: t.colors.text }]}>Login to proceed</Text>
+              <View style={{ height: 6 }} />
+              <Text style={[t.text.small, { color: t.colors.muted }]}>
+                Log in or sign up to proceed with your order
               </Text>
-            </View>
-            <Pressable accessibilityRole="button" onPress={() => { }} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
-              <Text style={[t.text.label, { color: t.colors.primary }]}>Change</Text>
-            </Pressable>
-          </View>
+              <View style={{ height: 12 }} />
+              <Button label="Login" onPress={handleLogin} style={{ marginBottom: 10 }} />
+            </Card>
+          ) : !cart.state.locationEnabled ? (
+            <Card style={{ padding: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}>
+                <LocationIcon />
+                <Text style={[t.text.h2, { color: t.colors.text }]}>Where would you like us to deliver?</Text>
 
-          <Button
-            label={canCheckout ? `Proceed • ${formatMoney(total)}` : 'Cart is empty'}
-            disabled={!canCheckout}
-            onPress={() => nav.navigate('Checkout')}
-          />
+              </View>
+              <View style={{ height: 12 }} />
+              <Button label="Add address" onPress={handleAddAddress} style={{ marginBottom: 10 }} />
+            </Card>
+          ) : (
+            <View style={{ borderWidth: 1, borderColor: t.colors.border, borderRadius: t.radii.lg, marginBottom: 0 }}>
+              <View
+                style={[
+                  styles.deliveryRow,
+                  { borderColor: t.colors.border, backgroundColor: t.colors.surface, borderRadius: t.radii.lg, paddingHorizontal: 16 },
+                ]}>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <LocationIcon />
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        t.text.small,
+                        { color: cart.state.locationServiceable ? t.colors.muted : t.colors.error },
+                      ]}>
+                      {cart.state.locationServiceable ? 'Deliver to Home' : 'Location is not serviceable'}
+                    </Text>
+                    <Text style={[t.text.label, { color: t.colors.text }]} numberOfLines={1}>
+                      {`${cart.state.address.line1}, ${cart.state.address.city}`}
+                    </Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleChangeAddress}
+                  style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
+                  <Text style={[t.text.label, { color: t.colors.primary }]}>Change</Text>
+                </Pressable>
+              </View>
+
+              <View
+                style={[
+                  styles.payRow,
+                  { borderColor: t.colors.border, backgroundColor: t.colors.surface, borderRadius: t.radii.lg },
+                ]}>
+                <View>
+                  <Text style={[t.text.small, { color: t.colors.muted }]}>To Pay</Text>
+                  <Text style={[t.text.h1, { fontSize: 34, color: t.colors.text }]}>{formatMoney(total)}</Text>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canCheckout || !cart.state.locationServiceable}
+                  onPress={() => {
+                    if (!canCheckout || !cart.state.locationServiceable) return;
+                    nav.navigate('Checkout');
+                  }}
+                  style={({ pressed }) => [
+                    styles.proceedBtn,
+                    {
+                      backgroundColor: t.colors.primary,
+                      opacity: !canCheckout || !cart.state.locationServiceable ? 0.25 : pressed ? 0.9 : 1,
+                      borderRadius: 14,
+                    },
+                  ]}>
+                  <Text style={[t.text.h2, { color: t.colors.primaryText }]}>Proceed</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
         </View>
       }>
       <View style={styles.header}>
         <Pressable accessibilityRole="button" onPress={() => nav.back()} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
-          <Text style={[t.text.h2, { color: t.colors.text }]}>{'‹'}</Text>
+          <LeftArrowIcon style={[t.text.h2, { color: t.colors.text }]} />
         </Pressable>
         <Text style={[t.text.label, { color: t.colors.text, flex: 1, textAlign: 'center' }]}>Review Cart</Text>
         <View style={{ width: 24 }} />
       </View>
 
       {
-        discountAmount > 0 && <View style={[styles.savingsBanner, { backgroundColor: '#D8F1FF', borderRadius: t.radii.md }]}>
-          <Text style={[t.text.small, { color: '#0B4F64', fontWeight: '700' }]}>
+        discountAmount > 0 && <View style={[styles.savingsBanner, { backgroundColor: t.colors.infoBg, borderRadius: t.radii.md }]}>
+          <Text style={[t.text.small, { color: t.colors.infoText, fontWeight: '700' }]}>
             {`You are saving ${formatMoney(discountAmount)} with this order!`}
           </Text>
         </View>
       }
 
 
-      <View style={[styles.warning, { backgroundColor: '#FFF7E6', borderColor: '#FCD34D', borderRadius: t.radii.md }]}>
-        <View style={[styles.warnIcon, { borderColor: '#F59E0B' }]} />
+      <View style={[styles.warning, { backgroundColor: t.colors.warningBg, borderColor: t.colors.warningBorder, borderRadius: t.radii.md }]}>
+        <View style={[styles.warnIcon, { borderColor: t.colors.warningIcon }]} />
         <View style={{ flex: 1 }}>
           <Text style={[t.text.small, { color: t.colors.muted }]}>
             Your order might be delayed due to high demand{'\n'}Your order might be delayed due to high demand
@@ -147,15 +298,15 @@ export function CartScreen() {
           </Text>
         ) : (
           <View style={{ gap: 12 }}>
-            {cart.state.items.map((item, idx) => (
+            {cart.state.items.map(item => (
               <View key={item.id}>
                 <View style={styles.itemRow}>
                   {item.imageUrl ? (
-                    <View style={{ width: 50, height: 66, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB' }}>
+                    <View style={{ width: 50, height: 66, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: t.colors.border }}>
                       <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
                     </View>
                   ) : (
-                    <View style={[styles.thumb, { backgroundColor: '#F3F4F6', borderRadius: 10 }]} />
+                    <View style={[styles.thumb, { backgroundColor: t.colors.surfaceMuted, borderRadius: 10 }]} />
                   )}
                   <View style={{ flex: 1, justifyContent: 'space-between', gap: 10 }}>
                     <Text style={[t.text.label, { color: t.colors.text }]} numberOfLines={2}>
@@ -179,23 +330,63 @@ export function CartScreen() {
                     </Text>
                   </View>
                 </View>
-                {/* {idx < cart.state.items.length - 1 ? <Divider v={12} /> : null} */}
               </View>
             ))}
           </View>
         )}
       </Card>
 
-      
+
 
       {cart.state.items.length > 0 ? (
         <>
           <View style={{ height: 14 }} />
 
+          {reco.length > 0 ? (
+            <Card style={{ padding: 14 }}>
+              <Text style={[t.text.h2, { color: t.colors.text }]} numberOfLines={1}>
+                Did you forget?
+              </Text>
+              <View style={{ height: 10 }} />
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={reco.slice(0, 3)}
+                keyExtractor={it => String(it.id)}
+                contentContainerStyle={{ gap: 12, paddingRight: 8 }}
+                renderItem={({ item }) => {
+                  const isDiscount =
+                    typeof item.discountPercentage === 'number' && item.discountPercentage > 0;
+
+                  return (
+                    <ProductCard
+                      title={item.title}
+                      subtitle={item.brand}
+                      priceUsd={item.price}
+                      discountPct={item.discountPercentage}
+                      imageUrl={item.thumbnail}
+                      ctaLabel={isDiscount ? '2 options ▾' : 'Add'}
+                      onPress={() => {
+                        if (isDiscount) onOpenOptions(item);
+                        else onAddSingle(item);
+                      }}
+                      onCtaPress={() => {
+                        if (isDiscount) onOpenOptions(item);
+                        else onAddSingle(item);
+                      }}
+                    />
+                  );
+                }}
+              />
+            </Card>
+          ) : null}
+
+          <View style={{ height: 12 }} />
+
           <Card style={{ padding: 14 }}>
             <View style={styles.couponHeader}>
               <PercentIcon />
-              <Text style={[t.text.label, { color: '#0B4F64' }]}>Top coupons for you</Text>
+              <Text style={[t.text.label, { color: t.colors.infoText }]}>Top coupons for you</Text>
               <PercentIcon />
             </View>
             <View style={{ height: 52 }} />
@@ -206,7 +397,7 @@ export function CartScreen() {
                 .map(c => {
                   const isExpired = c.status === 'expired';
                   const isApplied = cart.state.discount?.label === c.id;
-                  const isAmountValid = c.amountMoney < subtotal; // only applicable if coupon amount < total
+                  const isAmountValid = c.amountMoney < subtotal;
                   const canApply = !isExpired && subtotal > 0 && isAmountValid;
 
                   return (
@@ -218,13 +409,13 @@ export function CartScreen() {
                       ]}>
                       <View style={styles.couponBadge}>
                         <Text
-                          style={[t.text.small, { color: '#FFFFFF', fontWeight: '800', textAlign: 'center' }]}>
+                          style={[t.text.small, { color: t.colors.primaryText, fontWeight: '800', textAlign: 'center' }]}>
                           {c.amountOff}
                         </Text>
                       </View>
 
                       <Text
-                        style={[t.text.small, { color: isExpired ? '#EF4444' : t.colors.muted, marginTop: 26 }]}
+                        style={[t.text.small, { color: isExpired ? t.colors.error : t.colors.muted, marginTop: 26 }]}
                         numberOfLines={2}>
                         {c.title}
                       </Text>
@@ -253,8 +444,8 @@ export function CartScreen() {
                         style={({ pressed }) => [
                           styles.couponBtn,
                           {
-                            backgroundColor: isExpired || !isAmountValid ? '#F3F4F6' : isApplied ? '#F59E0B' : 'transparent',
-                            borderColor: isExpired || !isAmountValid ? '#F3F4F6' : isApplied ? '#F59E0B' : 'transparent',
+                            backgroundColor: isExpired || !isAmountValid ? t.colors.surfaceMuted : isApplied ? t.colors.warningIcon : 'transparent',
+                            borderColor: isExpired || !isAmountValid ? t.colors.surfaceMuted : isApplied ? t.colors.warningIcon : 'transparent',
                             opacity: isExpired || !isAmountValid ? 1 : pressed ? 0.85 : 1,
                             borderRadius: 14,
                           },
@@ -267,8 +458,8 @@ export function CartScreen() {
                                 isExpired || !isAmountValid
                                   ? t.colors.muted
                                   : isApplied
-                                    ? '#FFFFFF'
-                                    : '#F59E0B',
+                                    ? t.colors.primaryText
+                                    : t.colors.warningIcon,
                               fontWeight: '800',
                             },
                           ]}>
@@ -284,7 +475,7 @@ export function CartScreen() {
             {
               discountAmount > 0 && (
                 <>
-                  <Text style={[t.text.label, { color: '#0B4F64', textAlign: 'center' }]}>
+                  <Text style={[t.text.label, { color: t.colors.infoText, textAlign: 'center' }]}>
                     🎉 You are saving {discountAmount > 0 ? formatMoney(discountAmount) : formatMoney(0)} with this coupon 🎉
                   </Text>
                   <View style={{ height: 6 }} />
@@ -294,7 +485,7 @@ export function CartScreen() {
             }
             <Pressable
               accessibilityRole="button"
-              onPress={() => {}}
+              onPress={() => { }}
               style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
               <Text style={[t.text.body, { color: t.colors.muted, textAlign: 'center' }]}>
                 View more coupons and offers  ›
@@ -330,20 +521,20 @@ export function CartScreen() {
             const selected = selectedInstructions.includes(x);
             return (
               <Pressable
-              key={x}
-              accessibilityRole="button"
-              onPress={() => toggleInstruction(x)}
-              style={({ pressed }) => [
-                styles.chip,
-                {
-                  borderColor: selected ? t.colors.primary : t.colors.border,
-                  backgroundColor: selected ? 'rgba(85,145,61,0.12)' : t.colors.surface,
-                  borderRadius: t.radii.md,
-                  opacity: pressed ? 0.8 : 1,
-                },
-              ]}>
-              <Text style={[t.text.small, { color: selected ? t.colors.primary : t.colors.text }]}>{x}</Text>
-            </Pressable>
+                key={x}
+                accessibilityRole="button"
+                onPress={() => toggleInstruction(x)}
+                style={({ pressed }) => [
+                  styles.chip,
+                  {
+                    borderColor: selected ? t.colors.primary : t.colors.border,
+                    backgroundColor: selected ? 'rgba(85,145,61,0.12)' : t.colors.surface,
+                    borderRadius: t.radii.md,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}>
+                <Text style={[t.text.small, { color: selected ? t.colors.primary : t.colors.text }]}>{x}</Text>
+              </Pressable>
             );
           })}
         </View>
@@ -385,9 +576,13 @@ export function CartScreen() {
         <SummaryRow
           label="Delivery fee"
           value={shippingFee > 0 ? formatMoney(shippingFee) : 'FREE'}
-          valueColor={shippingFee > 0 ? t.colors.text : '#16A34A'}
-          subLabel={shippingFee > 0 ? 'Add items worth ₹20 to get free delivery' : undefined}
-          subLabelColor="#F97316"
+          valueColor={shippingFee > 0 ? t.colors.text : t.colors.success}
+          subLabel={
+            shippingFee > 0 && amountToFreeDelivery > 0
+              ? `Add items worth ${formatMoney(amountToFreeDelivery)} to get free delivery`
+              : undefined
+          }
+          subLabelColor={t.colors.accent}
         />
         <SummaryRow label="Discount" value={discountAmount > 0 ? `−${formatMoney(discountAmount)}` : formatMoney(0)} />
         <SummaryRow label="Platform fee" value={`−${formatMoney(0)}`} />
@@ -397,18 +592,14 @@ export function CartScreen() {
           <Text style={[t.text.h2, { color: t.colors.text }]}>{formatMoney(total)}</Text>
         </View>
         <View style={{ height: 12 }} />
-        <View style={[styles.bottomSavings, { backgroundColor: '#D8F1FF', borderRadius: t.radii.md }]}>
-          <Text style={[t.text.label, { color: '#0B4F64' }]}>
+        <View style={[styles.bottomSavings, { backgroundColor: t.colors.infoBg, borderRadius: t.radii.md }]}>
+          <Text style={[t.text.label, { color: t.colors.infoText }]}>
             {discountAmount > 0
               ? `You are saving ${formatMoney(discountAmount)} with this order!`
               : 'Add items to see savings'}
           </Text>
         </View>
       </Card>
-
-{/* <Card style={styles.summaryCard}>
-  <OrderSummary state={cart.state} />
-</Card> */}
 
       <View style={{ height: 12 }} />
 
@@ -419,6 +610,18 @@ export function CartScreen() {
           You can cancel your order for free within the first 90 seconds. After that, a cancellation fee will apply.
         </Text>
       </Card>
+
+      <OptionsSheet
+        open={optionsOpen}
+        onClose={onCloseOptions}
+        title={sheetProduct ? sheetProduct.brand ?? sheetProduct.title : 'Choose options'}
+        product={sheetProduct}
+        variants={variants}
+        qty={variantQty}
+        setQty={setVariantQty}
+        onConfirm={onConfirmOptions}
+        confirmDisabled={totalSelected === 0}
+      />
     </Screen>
   );
 }
@@ -450,41 +653,101 @@ function SummaryRow({
   );
 }
 
-function MiniRecoCard({ item, onAdd }: { item: DummyJsonProduct; onAdd: () => void }) {
+function OptionsSheet({
+  open,
+  onClose,
+  title,
+  product,
+  variants,
+  qty,
+  setQty,
+  onConfirm,
+  confirmDisabled,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  product: DummyJsonProduct | null;
+  variants: Array<{ key: string; label: string; multiplier: number }>;
+  qty: Record<string, number>;
+  setQty: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  onConfirm: () => void;
+  confirmDisabled: boolean;
+}) {
   const t = useTheme();
-  const price = usdToInr(item.price);
-  const hasDiscount = typeof item.discountPercentage === 'number' && item.discountPercentage > 0;
-  const mrp = hasDiscount ? price / (1 - Math.min(90, item.discountPercentage) / 100) : price;
+  const basePrice = product ? usdToInr(product.price) : 0;
+  const mrp = product
+    ? usdToInr(product.price / (1 - Math.min(90, product.discountPercentage) / 100))
+    : 0;
 
   return (
-    <View style={[styles.miniCard, { borderColor: t.colors.border, backgroundColor: t.colors.surface, borderRadius: t.radii.lg }]}>
-      <Image source={{ uri: item.thumbnail }} style={styles.miniImg} resizeMode="contain" />
-      <Text style={[t.text.small, { color: t.colors.muted }]} numberOfLines={1}>
-        {item.brand ?? 'Brand'}
-      </Text>
-      <Text style={[t.text.label, { color: t.colors.text }]} numberOfLines={2}>
-        {item.title}
-      </Text>
-      <View style={{ height: 6 }} />
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-        <Text style={[t.text.label, { color: t.colors.text }]}>{formatMoney(price)}</Text>
-        {hasDiscount ? (
-          <Text style={[t.text.small, { color: t.colors.muted, textDecorationLine: 'line-through' }]}>
-            {formatMoney(mrp)}
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalRoot}>
+        <Pressable accessibilityRole="button" onPress={onClose} style={styles.backdrop} />
+        <View
+          style={[
+            styles.sheet,
+            { backgroundColor: t.colors.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18 },
+          ]}>
+          <Text style={[t.text.label, { color: t.colors.text }]} numberOfLines={2}>
+            {title}
           </Text>
-        ) : null}
+          <Text style={[t.text.small, { color: t.colors.muted, marginTop: 2 }]} numberOfLines={1}>
+            {product?.title ?? ''}
+          </Text>
+
+          <View style={{ height: 12 }} />
+
+          <View style={{ gap: 12 }}>
+            {variants.map(v => {
+              const value = qty[v.key] ?? 0;
+              const price = basePrice * v.multiplier;
+              const mrpLine = mrp * v.multiplier;
+              return (
+                <View
+                  key={v.key}
+                  style={[
+                    styles.variantRow,
+                    { borderColor: t.colors.border, borderRadius: t.radii.md },
+                  ]}>
+                  {product?.thumbnail ? (
+                    <Image source={{ uri: product.thumbnail }} style={styles.variantImg} />
+                  ) : (
+                    <View style={styles.variantImg} />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[t.text.small, { color: t.colors.muted }]}>{v.label}</Text>
+                    <View style={{ height: 4 }} />
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                      <Text style={[t.text.label, { color: t.colors.text }]}>{formatMoney(price)}</Text>
+                      <Text style={[t.text.small, { color: t.colors.muted, textDecorationLine: 'line-through' }]}>
+                        {formatMoney(mrpLine)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                    <QuantityStepper
+                      value={value}
+                      min={0}
+                      onDec={() =>
+                        setQty(prev => ({ ...prev, [v.key]: Math.max(0, (prev[v.key] ?? 0) - 1) }))
+                      }
+                      onInc={() =>
+                        setQty(prev => ({ ...prev, [v.key]: Math.min(99, (prev[v.key] ?? 0) + 1) }))
+                      }
+                    />
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={{ height: 14 }} />
+
+          <Button label="Confirm" disabled={confirmDisabled} onPress={onConfirm} />
+        </View>
       </View>
-      <View style={{ height: 8 }} />
-      <Pressable
-        accessibilityRole="button"
-        onPress={onAdd}
-        style={({ pressed }) => [
-          styles.miniBtn,
-          { backgroundColor: t.colors.primary, borderRadius: t.radii.md, opacity: pressed ? 0.85 : 1 },
-        ]}>
-        <Text style={[t.text.small, { color: t.colors.primaryText, fontWeight: '700' }]}>Add</Text>
-      </Pressable>
-    </View>
+    </Modal>
   );
 }
 
@@ -495,11 +758,17 @@ const styles = StyleSheet.create({
   warnIcon: { width: 18, height: 18, borderWidth: 2, borderRadius: 9, marginTop: 2 },
   itemRow: { flexDirection: 'row', gap: 16, alignItems: 'flex-start', marginTop: 6 },
   thumb: { width: 46, height: 46 },
-  deliveryRow: { borderWidth: 1, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  miniCard: { width: 150, borderWidth: 1, padding: 10 },
-  miniImg: { width: '100%', height: 78 },
-  miniBtn: { height: 32, alignItems: 'center', justifyContent: 'center' },
-  couponHeader: {  flexDirection: 'row', gap: 6, alignSelf: 'center', alignItems: 'center' },
+  deliveryRow: { borderBottomWidth: 1, padding: 12, flexDirection: 'row', alignItems: 'center' },
+  payRow: {
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingBottom: 20,
+  },
+  proceedBtn: { height: 54, paddingHorizontal: 34, alignItems: 'center', justifyContent: 'center' },
+  couponHeader: { flexDirection: 'row', gap: 6, alignSelf: 'center', alignItems: 'center' },
   couponCard: { flex: 1, minWidth: 0, padding: 10, borderWidth: 1, height: 170 },
   couponBadge: {
     position: 'absolute',
@@ -509,19 +778,21 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#0C748C',
+    backgroundColor: palette.teal700,
     alignItems: 'center',
     justifyContent: 'center',
   },
   couponBtn: { height: 34, alignItems: 'center', justifyContent: 'center' },
-  cashBadge: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, backgroundColor: '#EFF6FF' },
+  cashBadge: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, backgroundColor: palette.gray50Blue },
   chip: { paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1 },
   noteInput: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
   addChipBtn: { height: 44, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   bottomSavings: { paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
-  summaryCard: {
-    padding: 16,
-  },
+  modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  sheet: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 18 },
+  variantRow: { flexDirection: 'row', gap: 12, borderWidth: 1, padding: 12, alignItems: 'center' },
+  variantImg: { width: 44, height: 44, borderRadius: 10, backgroundColor: palette.gray100 },
 });
 

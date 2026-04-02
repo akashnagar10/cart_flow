@@ -25,6 +25,9 @@ const initialState: CartState = {
     state: 'KA',
     postalCode: '560001',
   },
+  userLoggedIn: true,
+  locationEnabled: true,
+  locationServiceable: true,
   payment: { type: 'card', brand: 'visa', last4: '4242' },
   taxRate: 0.0825,
 };
@@ -116,9 +119,5 @@ export function useCart(): CartApi {
   const ctx = React.useContext(CartContext);
   if (!ctx) throw new Error('useCart must be used within CartProvider');
   return ctx;
-}
-
-function seedItems(): CartItem[] {
-  return [];
 }
 

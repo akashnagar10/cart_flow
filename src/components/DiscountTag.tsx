@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { palette } from '../theme/colors';
 
 type DiscountTagProps = {
   value: number | string;
@@ -13,7 +14,7 @@ const DiscountTag: React.FC<DiscountTagProps> = ({
   value,
   width = 100,
   height = 120,
-  color = '#0C748C',
+  color = palette.teal700,
 }) => {
   const zigZagHeight = height * 0.2;
   const baseHeight = height - zigZagHeight;
@@ -74,12 +75,12 @@ const styles = StyleSheet.create({
   },
   percent: {
     fontWeight: '900',
-    color: '#fff',
+    color: palette.white,
     letterSpacing: 1,
   },
   off: {
     fontWeight: '300',
-    color: '#fff',
+    color: palette.white,
     letterSpacing: 2,
   },
 });

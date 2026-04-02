@@ -37,7 +37,7 @@ export function ProductCard({
       <View style={[styles.card, { borderColor: t.colors.border, backgroundColor: t.colors.surface, borderRadius: t.radii.lg }]}>
         {hasDiscount ? (
           <View style={styles.badge}>
-            <DiscountTag value={Math.round(discountPct ?? 0)} width={26} height={35} color="#2F6D86" />
+            <DiscountTag value={Math.round(discountPct ?? 0)} width={26} height={35} color={t.colors.discountTag} />
           </View>
         ) : null}
 
@@ -88,7 +88,6 @@ const styles = StyleSheet.create({
     minHeight: 170,
     width: 150,
     height: 250,
-    // maxWidth: 150,
   },
   img: { width: '100%', height: 78 },
   badge: {

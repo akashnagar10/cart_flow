@@ -1,6 +1,8 @@
 import { round2 } from './money';
 import { CartState, Money } from './types';
 
+export const FREE_DELIVERY_THRESHOLD: Money = 3000;
+
 export function selectSubtotal(state: CartState): Money {
   return round2(
     state.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
@@ -30,9 +32,19 @@ export function selectTax(state: CartState): Money {
   return round2(taxable * rate);
 }
 
+export function selectPreShippingTotal(state: CartState): Money {
+  // Total before shipping is applied.
+  if (selectSubtotal(state) <= 0) return 0;
+  const taxable = selectTaxableAmount(state);
+  const tax = selectTax(state);
+  return round2(taxable + tax);
+}
+
 export function selectShippingFee(state: CartState): Money {
   // If cart is empty, don't charge shipping.
   if (selectSubtotal(state) <= 0) return 0;
+  // Free delivery if total (before shipping) meets threshold.
+  if (selectPreShippingTotal(state) >= FREE_DELIVERY_THRESHOLD) return 0;
   return round2(Math.max(0, state.shipping.fee));
 }
 
